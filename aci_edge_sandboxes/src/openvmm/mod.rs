@@ -217,6 +217,8 @@ impl OpenVmmBackend {
             kernel: self.config.kernel.clone(),
             initrd: self.config.initrd.clone(),
             hypervisor: self.config.hypervisor,
+            host_cpu_profile: self.config.host_cpu_profile,
+            caller_owned_exports: self.config.caller_owned_exports,
             memory_mib: record.memory_mib,
             identity: WorkloadIdentity {
                 uid: record.workload_uid,

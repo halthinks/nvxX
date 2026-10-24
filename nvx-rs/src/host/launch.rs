@@ -115,6 +115,10 @@ pub struct LaunchSpec {
     pub initrd: PathBuf,
     /// Hypervisor used by OpenVMM.
     pub hypervisor: Hypervisor,
+    /// Opt in to OpenVMM host-derived development CPU profile; default stays portable auto.
+    pub host_cpu_profile: bool,
+    /// Use Linux caller credentials for host exports; export roots must share a non-root owner.
+    pub caller_owned_exports: bool,
     /// Guest memory in MiB; positive.
     pub memory_mib: u32,
     /// Identity of the workloads; neither ID may be root's.
@@ -149,6 +153,8 @@ impl LaunchSpec {
             kernel: artifacts.kernel,
             initrd: artifacts.initrd,
             hypervisor,
+            host_cpu_profile: false,
+            caller_owned_exports: false,
             memory_mib: DEFAULT_MEMORY_MIB,
             identity: WorkloadIdentity::DEFAULT,
             hostname: DEFAULT_HOSTNAME.to_owned(),
@@ -245,6 +251,9 @@ impl LaunchSpec {
         ] {
             arguments.push(argument.into());
         }
+        if self.host_cpu_profile {
+            arguments.extend(["--cpu-profile".into(), "host".into()]);
+        }
         arguments.push("--memory".into());
         arguments.push(format!("{}M", self.memory_mib).into());
         arguments.push("--kernel".into());
@@ -267,6 +276,9 @@ impl LaunchSpec {
         );
         if let Some(plan) = &self.filesystem {
             arguments.extend(plan.openvmm_arguments().into_iter().map(OsString::from));
+            if self.caller_owned_exports {
+                arguments.extend(["--mount-owner".into(), "caller".into()]);
+            }
         }
         Ok(arguments)
     }
@@ -428,6 +440,20 @@ mod tests {
     }
 
     #[test]
+    fn caller_ownership_is_explicit_and_only_applies_to_exports() {
+        let mut selected = spec();
+        selected.caller_owned_exports = true;
+        let args = selected.openvmm_arguments("/state/control.sock", Path::new("/state/outcome.json")).unwrap();
+        assert!(!args.iter().any(|arg| arg == "--mount-owner"));
+        selected.filesystem = Some(super::super::filesystem::ExportPlan { children: vec![], binds: vec![] });
+        let args = selected.openvmm_arguments("/state/control.sock", Path::new("/state/outcome.json")).unwrap();
+        assert!(args.windows(2).any(|pair| pair[0] == "--mount-owner" && pair[1] == "caller"));
+        selected.caller_owned_exports = false;
+        let args = selected.openvmm_arguments("/state/control.sock", Path::new("/state/outcome.json")).unwrap();
+        assert!(!args.iter().any(|arg| arg == "--mount-owner"));
+    }
+
+    #[test]
     fn arguments_select_the_managed_direct_guest() {
         let arguments = spec()
             .openvmm_arguments("/state/t/control.sock", Path::new("/state/t/outcome.json"))
@@ -463,6 +489,15 @@ mod tests {
             ]
         );
         assert!(!arguments.contains(&"--microvm-sandbox-block"));
+    }
+
+    #[test]
+    fn host_cpu_profile_requires_explicit_opt_in() {
+        let mut selected = spec();
+        assert!(!selected.host_cpu_profile);
+        selected.host_cpu_profile = true;
+        let args = selected.openvmm_arguments("/state/t/control.sock", Path::new("/state/t/outcome.json")).unwrap();
+        assert!(args.windows(2).any(|a| a[0] == "--cpu-profile" && a[1] == "host"));
     }
 
     #[test]

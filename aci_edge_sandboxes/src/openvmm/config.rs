@@ -26,6 +26,10 @@ pub struct OpenVmmConfig {
     pub initrd: PathBuf,
     /// Hypervisor used by OpenVMM.
     pub hypervisor: Hypervisor,
+    /// Explicit development-only host CPU profile; false preserves OpenVMM auto selection.
+    pub host_cpu_profile: bool,
+    /// Opt in to Linux caller-owned exports; roots must share a non-root owner.
+    pub caller_owned_exports: bool,
     /// Directory that holds per-sandbox state. Choose a directory private to the current user.
     pub state_root: PathBuf,
     /// Default guest memory in MiB. Provision requests may override it.
@@ -104,6 +108,8 @@ impl OpenVmmConfig {
             kernel: kernel.into(),
             initrd: initrd.into(),
             hypervisor,
+            host_cpu_profile: false,
+            caller_owned_exports: false,
             state_root: state_root.into(),
             memory_mib: Self::DEFAULT_MEMORY_MIB,
             workload_uid: Self::DEFAULT_WORKLOAD_ID,
